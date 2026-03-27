@@ -1,8 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import { jsPDF } from "jspdf";
-import html2canvas from "html2canvas"; // npm install jspdf html2canvas
 
 const BASE_RATE = 14.96; // дневная ставка
 const NIGHT_RATE = +(BASE_RATE * 1.25).toFixed(2); // +25% → 18.70 €/ч
@@ -26,8 +24,18 @@ function App() {
   const [breakEnd, setBreakEnd] = useState("");
   const [end, setEnd] = useState("");
 
-  const [entries, setEntries] = useState([]);
+  // Чтение entries из localStorage
+  const [entries, setEntries] = useState(() => {
+    const saved = localStorage.getItem("entries");
+    return saved ? JSON.parse(saved) : [];
+  });
 
+  // Сохранение entries в localStorage
+  useEffect(() => {
+    localStorage.setItem("entries", JSON.stringify(entries));
+  }, [entries]);
+
+  // сменить дату → очищаем время, но можно потом заново ввести
   const handleDateChange = (d) => {
     if (!d) return;
     setSelectedDate(d);
@@ -37,6 +45,7 @@ function App() {
     setEnd("");
   };
 
+  // сменить тип смены → очищаем время
   const setLateShift = () => {
     setShiftType("late");
     setStart("");
@@ -124,43 +133,6 @@ function App() {
   const totalNightAmount = monthEntries
     .filter((e) => e.shiftType === "night")
     .reduce((sum, e) => sum + e.amount, 0);
-
-  // PDF-отчёт
-  const refReport = React.useRef(null);
-
-  const generatePdf = async () => {
-    if (!monthEntries.length) {
-      alert("Нет смен для отчёта.");
-      return;
-    }
-
-    const element = refReport.current;
-    const canvas = await html2canvas(element, { scale: 2 });
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-    const ratio = canvas.height / canvas.width;
-
-    const imgHeight = pdfWidth * ratio * 0.9;
-    const imgWidth = pdfWidth * 0.9;
-
-    pdf.addImage(
-      imgData,
-      "PNG",
-      (pdfWidth - imgWidth) / 2,
-      10,
-      imgWidth,
-      imgHeight
-    );
-    pdf.save("arbeitsstunden.pdf");
-  };
-
-  const monthText = new Intl.DateTimeFormat("de-DE", {
-    month: "long",
-    year: "numeric",
-  }).format(selectedDate);
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: 16 }}>
