@@ -4,8 +4,10 @@ import "react-day-picker/dist/style.css";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas"; // npm install jspdf html2canvas
 
+
 const BASE_RATE = 14.96; // дневная ставка
 const NIGHT_RATE = +(BASE_RATE * 1.25).toFixed(2); // +25% → 18.70 €/ч
+
 
 function formatHm(mins) {
   const h = Math.floor(mins / 60);
@@ -24,6 +26,7 @@ function getMonthText(date) {
   }).format(date);
 }
 
+
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [shiftType, setShiftType] = useState("late"); // late | night
@@ -33,18 +36,28 @@ function App() {
   const [breakEnd, setBreakEnd] = useState("");
   const [end, setEnd] = useState("");
 
-  // Чтение entries из localStorage
+  // ===== ИНИЦИАЛИЗАЦИЯ entries из localStorage =====
   const [entries, setEntries] = useState(() => {
-    const saved = localStorage.getItem("entries");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("entries");
+      return saved ? JSON.parse(saved) : [];
+    } catch (err) {
+      console.error("Ошибка чтения entries из localStorage", err);
+      return [];
+    }
   });
 
-  // Сохранение entries в localStorage
+  // Сохранение в localStorage
   useEffect(() => {
-    localStorage.setItem("entries", JSON.stringify(entries));
+    try {
+      localStorage.setItem("entries", JSON.stringify(entries));
+    } catch (err) {
+      console.error("Ошибка записи entries в localStorage", err);
+    }
   }, [entries]);
 
-  // сменить дату → очищаем время
+
+  // при смене даты — очищаем время, но не трогаем entries
   const handleDateChange = (d) => {
     if (!d) return;
     setSelectedDate(d);
@@ -73,26 +86,20 @@ function App() {
   const saveEntry = () => {
     if (!selectedDate || !start || !end) return;
 
-    const startMin = (start || "00:00")
-      .split(":")
-      .map(Number)
-      .reduce((h, m) => h * 60 + m, 0);
-    const endMin = (end || "00:00")
-      .split(":")
-      .map(Number)
-      .reduce((h, m) => h * 60 + m, 0);
+    const parseTime = (timeStr) => {
+      if (!timeStr) return 0;
+      const [h, m] = timeStr.split(":").map(Number);
+      return h * 60 + m;
+    };
+
+    const startMin = parseTime(start);
+    const endMin = parseTime(end);
 
     let workMinutes = endMin - startMin;
     if (workMinutes < 0) workMinutes += 24 * 60;
 
-    const breakStartMin = (breakStart || "00:00")
-      .split(":")
-      .map(Number)
-      .reduce((h, m) => h * 60 + m, 0);
-    const breakEndMin = (breakEnd || "00:00")
-      .split(":")
-      .map(Number)
-      .reduce((h, m) => h * 60 + m, 0);
+    const breakStartMin = parseTime(breakStart);
+    const breakEndMin = parseTime(breakEnd);
 
     if (breakStart && breakEnd) {
       let breakMinutes = breakEndMin - breakStartMin;
@@ -131,7 +138,9 @@ function App() {
     const month = selectedDate.getMonth();
     const year = selectedDate.getFullYear();
     return entries.filter(
-      (e) => e.date.getMonth() === month && e.date.getFullYear() === year
+      (e) =>
+        new Date(e.date).getMonth() === month &&
+        new Date(e.date).getFullYear() === year
     );
   }, [entries, selectedDate]);
 
@@ -154,10 +163,8 @@ function App() {
     .filter((e) => e.shiftType === "night")
     .reduce((sum, e) => sum + e.amount, 0);
 
-  // для PDF (месяц как текст)
   const monthText = getMonthText(selectedDate);
 
-  // PDF-отчёт
   const refReport = React.useRef(null);
 
   const generatePdf = async () => {
@@ -302,7 +309,7 @@ function App() {
       <ul style={{ paddingLeft: 16 }}>
         {monthEntries
           .slice()
-          .sort((a, b) => a.date - b.date)
+          .sort((a, b) => new Date(a.date) - new Date(b.date))
           .map((e) => (
             <li
               key={e.key}
@@ -318,7 +325,7 @@ function App() {
               }}
             >
               <div>
-                {e.date.toLocaleDateString("de-DE")} —{" "}
+                {new Date(e.date).toLocaleDateString("de-DE")} —{" "}
                 {e.shiftType === "night" ? "ночная" : "поздняя"},{" "}
                 {e.start}–{e.end}, пауза {e.breakStart || "--:--"}–
                 {e.breakEnd || "--:--"} (
@@ -413,7 +420,7 @@ function App() {
           <tbody>
             {monthEntries
               .slice()
-              .sort((a, b) => a.date - b.date)
+              .sort((a, b) => new Date(a.date) - new Date(b.date))
               .map((e) => {
                 const typeText =
                   e.shiftType === "night" ? "Nachtschicht" : "Spätschicht";
@@ -421,7 +428,7 @@ function App() {
                 return (
                   <tr key={e.key}>
                     <td style={{ border: "1px solid #999", padding: "6px 8px" }}>
-                      {e.date.toLocaleDateString("de-DE")}
+                      {new Date(e.date).toLocaleDateString("de-DE")}
                     </td>
                     <td style={{ border: "1px solid #999", padding: "6px 8px" }}>
                       {typeText}
