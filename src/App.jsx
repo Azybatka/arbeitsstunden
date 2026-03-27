@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas"; // npm install jspdf html2canvas
 
 const BASE_RATE = 14.96; // дневная ставка
 const NIGHT_RATE = +(BASE_RATE * 1.25).toFixed(2); // +25% → 18.70 €/ч
@@ -13,6 +15,13 @@ function formatHm(mins) {
 
 function formatEuro(amount) {
   return amount.toFixed(2).replace(".", ",") + " €";
+}
+
+function getMonthText(date) {
+  return new Intl.DateTimeFormat("de-DE", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
 }
 
 function App() {
@@ -35,7 +44,7 @@ function App() {
     localStorage.setItem("entries", JSON.stringify(entries));
   }, [entries]);
 
-  // сменить дату → очищаем время, но можно потом заново ввести
+  // сменить дату → очищаем время
   const handleDateChange = (d) => {
     if (!d) return;
     setSelectedDate(d);
@@ -45,7 +54,6 @@ function App() {
     setEnd("");
   };
 
-  // сменить тип смены → очищаем время
   const setLateShift = () => {
     setShiftType("late");
     setStart("");
@@ -65,14 +73,26 @@ function App() {
   const saveEntry = () => {
     if (!selectedDate || !start || !end) return;
 
-    const startMin = (start || "00:00").split(":").map(Number).reduce((h, m) => h * 60 + m, 0);
-    const endMin = (end || "00:00").split(":").map(Number).reduce((h, m) => h * 60 + m, 0);
+    const startMin = (start || "00:00")
+      .split(":")
+      .map(Number)
+      .reduce((h, m) => h * 60 + m, 0);
+    const endMin = (end || "00:00")
+      .split(":")
+      .map(Number)
+      .reduce((h, m) => h * 60 + m, 0);
 
     let workMinutes = endMin - startMin;
     if (workMinutes < 0) workMinutes += 24 * 60;
 
-    const breakStartMin = (breakStart || "00:00").split(":").map(Number).reduce((h, m) => h * 60 + m, 0);
-    const breakEndMin = (breakEnd || "00:00").split(":").map(Number).reduce((h, m) => h * 60 + m, 0);
+    const breakStartMin = (breakStart || "00:00")
+      .split(":")
+      .map(Number)
+      .reduce((h, m) => h * 60 + m, 0);
+    const breakEndMin = (breakEnd || "00:00")
+      .split(":")
+      .map(Number)
+      .reduce((h, m) => h * 60 + m, 0);
 
     if (breakStart && breakEnd) {
       let breakMinutes = breakEndMin - breakStartMin;
@@ -133,6 +153,41 @@ function App() {
   const totalNightAmount = monthEntries
     .filter((e) => e.shiftType === "night")
     .reduce((sum, e) => sum + e.amount, 0);
+
+  // для PDF (месяц как текст)
+  const monthText = getMonthText(selectedDate);
+
+  // PDF-отчёт
+  const refReport = React.useRef(null);
+
+  const generatePdf = async () => {
+    if (!monthEntries.length) {
+      alert("Нет смен для отчёта.");
+      return;
+    }
+
+    const element = refReport.current;
+    const canvas = await html2canvas(element, { scale: 2 });
+    const imgData = canvas.toDataURL("image/png");
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+    const ratio = canvas.height / canvas.width;
+
+    const imgHeight = pdfWidth * ratio * 0.9;
+    const imgWidth = pdfWidth * 0.9;
+
+    pdf.addImage(
+      imgData,
+      "PNG",
+      (pdfWidth - imgWidth) / 2,
+      10,
+      imgWidth,
+      imgHeight
+    );
+    pdf.save("arbeitsstunden.pdf");
+  };
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: 16 }}>
